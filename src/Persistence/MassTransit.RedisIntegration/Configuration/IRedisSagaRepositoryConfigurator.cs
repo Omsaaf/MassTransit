@@ -17,6 +17,8 @@ namespace MassTransit.RedisIntegration
 
         TimeSpan LockRetryTimeout { set; }
 
+        TimeSpan? Expiry { set; }
+
         /// <summary>
         /// Set the database factory using configuration, which caches a <see cref="ConnectionMultiplexer"/> under the hood.
         /// </summary>
@@ -40,6 +42,12 @@ namespace MassTransit.RedisIntegration
         /// </summary>
         /// <param name="connectionFactory"></param>
         void ConnectionFactory(Func<IConfigurationServiceProvider, ConnectionMultiplexer> connectionFactory);
+
+        /// <summary>
+        /// Select a database other than the default to be used (optional)
+        /// </summary>
+        /// <param name="databaseSelector"></param>
+        void SelectDatabase(SelectDatabase databaseSelector);
     }
 
 

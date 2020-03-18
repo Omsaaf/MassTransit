@@ -14,6 +14,7 @@ namespace MassTransit.RedisIntegration.Configuration
         where TSaga : class, IVersionedSaga
     {
         Func<IConfigurationServiceProvider, ConnectionMultiplexer> _connectionFactory;
+        SelectDatabase _databaseSelector;
         ConfigurationOptions _configurationOptions;
 
         public RedisSagaRepositoryConfigurator()
@@ -23,6 +24,7 @@ namespace MassTransit.RedisIntegration.Configuration
             LockRetryTimeout = LockTimeout = TimeSpan.FromSeconds(30);
 
             DatabaseConfiguration("127.0.0.1");
+            _databaseSelector = SelectDefaultDatabase;
         }
 
         public ConcurrencyMode ConcurrencyMode { get; set; }
@@ -30,6 +32,7 @@ namespace MassTransit.RedisIntegration.Configuration
         public string LockSuffix { get; set; }
         public TimeSpan LockTimeout { get; set; }
         public TimeSpan LockRetryTimeout { get; set; }
+        public TimeSpan? Expiry { get; set; }
 
         public void DatabaseConfiguration(string configuration)
         {
@@ -53,6 +56,11 @@ namespace MassTransit.RedisIntegration.Configuration
             _connectionFactory = connectionFactory;
         }
 
+        public void SelectDatabase(SelectDatabase databaseSelector)
+        {
+            _databaseSelector = databaseSelector;
+        }
+
         public IEnumerable<ValidationResult> Validate()
         {
             if (_connectionFactory == null)
@@ -67,8 +75,13 @@ namespace MassTransit.RedisIntegration.Configuration
             where T : class, IVersionedSaga
         {
             configurator.RegisterSingleInstance(_connectionFactory);
-            configurator.RegisterSingleInstance(new RedisSagaRepositoryOptions<T>(ConcurrencyMode, LockTimeout, LockSuffix, KeyPrefix));
+            configurator.RegisterSingleInstance(new RedisSagaRepositoryOptions<T>(ConcurrencyMode, LockTimeout, LockSuffix, KeyPrefix, _databaseSelector, Expiry));
             configurator.RegisterSagaRepository<T, DatabaseContext<T>, RedisSagaConsumeContextFactory<T>, RedisSagaRepositoryContextFactory<T>>();
+        }
+
+        static IDatabase SelectDefaultDatabase(IConnectionMultiplexer multiplexer)
+        {
+            return multiplexer.GetDatabase();
         }
     }
 }

@@ -1,8 +1,10 @@
 ﻿namespace MassTransit.Azure.ServiceBus.Core.Configurators
 {
     using System;
+    using System.Diagnostics;
     using BusConfigurators;
     using Configuration;
+    using Context;
     using MassTransit.Builders;
     using Settings;
     using Topology.Configuration;
@@ -27,10 +29,7 @@
 
             var queueName = _busConfiguration.Topology.Consume.CreateTemporaryQueueName("bus");
 
-            _queueConfigurator = new QueueConfigurator(queueName)
-            {
-                AutoDeleteOnIdle = Defaults.TemporaryAutoDeleteOnIdle
-            };
+            _queueConfigurator = new QueueConfigurator(queueName) {AutoDeleteOnIdle = Defaults.TemporaryAutoDeleteOnIdle};
 
             _settings = new ReceiveEndpointSettings(queueName, _queueConfigurator);
         }
@@ -40,6 +39,14 @@
             void ConfigureBusEndpoint(IServiceBusReceiveEndpointConfigurator configurator)
             {
                 configurator.SubscribeMessageTopics = false;
+            }
+
+            if (Activity.DefaultIdFormat != ActivityIdFormat.Hierarchical)
+            {
+                LogContext.Warning?.Log("Azure ServiceBus requires the hierarchical activity id format, MassTransit will change it globally");
+
+                Activity.DefaultIdFormat = ActivityIdFormat.Hierarchical;
+                Activity.ForceDefaultIdFormat = true;
             }
 
             var busReceiveEndpointConfiguration = _busConfiguration.HostConfiguration
@@ -88,6 +95,16 @@
         public void OverrideDefaultBusEndpointQueueName(string value)
         {
             _queueConfigurator.Path = value;
+        }
+
+        public void SetNamespaceSeparatorToTilde()
+        {
+            _hostConfiguration.SetNamespaceSeparatorToTilde();
+        }
+
+        public void SetNamespaceSeparatorTo(string separator)
+        {
+            _hostConfiguration.SetNamespaceSeparatorTo(separator);
         }
 
         public bool DeployTopologyOnly

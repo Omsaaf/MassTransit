@@ -15,6 +15,7 @@
         using System.Collections.Generic;
         using System.Data.Entity;
         using System.Data.Entity.ModelConfiguration;
+        using GreenPipes;
         using Mappings;
         using MassTransit.Saga;
 
@@ -109,7 +110,7 @@
         }
 
 
-        [TestFixture]
+        [TestFixture, Explicit]
         public class When_pre_inserting_the_state_machine_instance_using_ef :
             InMemoryTestFixture
         {
@@ -205,6 +206,7 @@
             {
                 _machine = new TestStateMachine();
 
+                configurator.UseMessageRetry(r => r.Immediate(5));
                 configurator.StateMachineSaga(_machine, _repository);
             }
 
@@ -247,7 +249,7 @@
             }
 
 
-            [Test]
+            [Test, Explicit]
             public async Task Should_receive_the_published_message()
             {
                 Task<ConsumeContext<StartupComplete>> messageReceived = ConnectPublishHandler<StartupComplete>();
@@ -261,6 +263,8 @@
                 await _repository.ShouldContainSaga(sagaId, TestTimeout);
 
                 var message = new Start(sagaId, "Joe");
+
+                await Task.Delay(1000);
 
                 await InputQueueSendEndpoint.Send(message);
 
