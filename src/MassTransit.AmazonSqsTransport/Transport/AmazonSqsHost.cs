@@ -49,8 +49,7 @@
             {
                 Type = "AmazonSQS",
                 Settings.Region,
-                Settings.AccessKey,
-                Password = new string('*', Settings.SecretKey.Length)
+                Settings.AccessKey
             });
 
             ConnectionContextSupervisor.Probe(context);
@@ -72,7 +71,11 @@
         {
             var queueName = definition.GetEndpointName(endpointNameFormatter ?? DefaultEndpointNameFormatter.Instance);
 
-            return ConnectReceiveEndpoint(queueName, x => x.Apply(definition, configureEndpoint));
+            return ConnectReceiveEndpoint(queueName, configurator =>
+            {
+                _hostConfiguration.ApplyEndpointDefinition(configurator, definition);
+                configureEndpoint?.Invoke(configurator);
+            });
         }
 
         public HostReceiveEndpointHandle ConnectReceiveEndpoint(string queueName, Action<IAmazonSqsReceiveEndpointConfigurator> configure = null)

@@ -9,7 +9,6 @@ namespace MassTransit.Transports.InMemory
     using Definition;
     using Fabric;
     using GreenPipes;
-    using GreenPipes.Caching;
     using MassTransit.Configurators;
     using Topology.Builders;
     using Topology.Topologies;
@@ -23,7 +22,6 @@ namespace MassTransit.Transports.InMemory
         IInMemoryHostControl
     {
         readonly IInMemoryHostConfiguration _hostConfiguration;
-        readonly IIndex<string, InMemorySendTransport> _index;
         readonly IMessageFabric _messageFabric;
 
         public InMemoryHost(IInMemoryHostConfiguration hostConfiguration, IInMemoryHostTopology hostTopology)
@@ -32,9 +30,6 @@ namespace MassTransit.Transports.InMemory
             _hostConfiguration = hostConfiguration;
 
             _messageFabric = new MessageFabric(hostConfiguration.TransportConcurrencyLimit);
-
-            var cache = new GreenCache<InMemorySendTransport>(hostConfiguration.SendTransportCacheSettings);
-            _index = cache.AddIndex("exchangeName", x => x.ExchangeName);
         }
 
         public IReceiveTransport GetReceiveTransport(string queueName, ReceiveEndpointContext receiveEndpointContext)
@@ -68,7 +63,11 @@ namespace MassTransit.Transports.InMemory
         {
             var queueName = definition.GetEndpointName(endpointNameFormatter ?? DefaultEndpointNameFormatter.Instance);
 
-            return ConnectReceiveEndpoint(queueName, x => x.Apply(definition, configureEndpoint));
+            return ConnectReceiveEndpoint(queueName, configurator =>
+            {
+                _hostConfiguration.ApplyEndpointDefinition(configurator, definition);
+                configureEndpoint?.Invoke(configurator);
+            });
         }
 
         public override HostReceiveEndpointHandle ConnectReceiveEndpoint(string queueName, Action<IReceiveEndpointConfigurator> configureEndpoint = null)
@@ -97,16 +96,13 @@ namespace MassTransit.Transports.InMemory
 
             var exchangeName = address.GetQueueOrExchangeName();
 
-            return await _index.Get(exchangeName, async key =>
-            {
-                TransportLogMessages.CreateSendTransport(address);
+            TransportLogMessages.CreateSendTransport(address);
 
-                var exchange = _messageFabric.GetExchange(exchangeName);
+            var exchange = _messageFabric.GetExchange(exchangeName);
 
-                var context = new ExchangeInMemorySendTransportContext(exchange, SendLogContext);
+            var context = new ExchangeInMemorySendTransportContext(exchange, SendLogContext);
 
-                return new InMemorySendTransport(context);
-            }).ConfigureAwait(false);
+            return new InMemorySendTransport(context);
         }
 
         public Uri NormalizeAddress(Uri address)

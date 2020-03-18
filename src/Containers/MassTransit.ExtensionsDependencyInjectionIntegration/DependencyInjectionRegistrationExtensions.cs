@@ -1,6 +1,7 @@
 namespace MassTransit
 {
     using System;
+    using Conductor.Configuration;
     using ConsumeConfigurators;
     using Definition;
     using ExtensionsDependencyInjectionIntegration;
@@ -39,12 +40,43 @@ namespace MassTransit
         /// <param name="provider">The container reference</param>
         /// <param name="endpointNameFormatter">Optional, the endpoint name formatter</param>
         /// <typeparam name="T">The bus factory type (depends upon the transport)</typeparam>
-        public static void ConfigureEndpoints<T>(this T configurator, IServiceProvider provider, IEndpointNameFormatter endpointNameFormatter = null)
-            where T : IReceiveConfigurator
+        public static void ConfigureEndpoints<T>(this IReceiveConfigurator<T> configurator, IServiceProvider provider,
+            IEndpointNameFormatter endpointNameFormatter = null)
+            where T : IReceiveEndpointConfigurator
         {
             var registration = provider.GetRequiredService<IRegistration>();
 
             registration.ConfigureEndpoints(configurator, endpointNameFormatter);
+        }
+
+        /// <summary>
+        /// Configure service endpoints for all defined consumer, saga, and activity types using an optional
+        /// endpoint name formatter. If no endpoint name formatter is specified, and an <see cref="IEndpointNameFormatter"/>
+        /// is registered in the container, it is resolved from the container. Otherwise, the <see cref="DefaultEndpointNameFormatter"/>
+        /// is used.
+        /// </summary>
+        /// <param name="configurator">The <see cref="IBusFactoryConfigurator"/> for the bus being configured</param>
+        /// <param name="provider">The container reference</param>
+        /// <param name="options">The service instance options</param>
+        /// <typeparam name="TEndpointConfigurator">The ReceiveEndpointConfigurator type for the transport</typeparam>
+        public static void ConfigureServiceEndpoints<TEndpointConfigurator>(this IReceiveConfigurator<TEndpointConfigurator> configurator,
+            IServiceProvider provider, ServiceInstanceOptions options = null)
+            where TEndpointConfigurator : IReceiveEndpointConfigurator
+        {
+            var registration = provider.GetRequiredService<IRegistration>();
+
+            options ??= new ServiceInstanceOptions();
+            if (options.EndpointNameFormatter is DefaultEndpointNameFormatter)
+            {
+                var formatter = provider.GetService<IEndpointNameFormatter>();
+                if (formatter != null)
+                    options.SetEndpointNameFormatter(formatter);
+            }
+
+            configurator.ServiceInstance(options, instanceConfigurator =>
+            {
+                registration.ConfigureEndpoints(instanceConfigurator, instanceConfigurator.EndpointNameFormatter);
+            });
         }
 
         /// <summary>

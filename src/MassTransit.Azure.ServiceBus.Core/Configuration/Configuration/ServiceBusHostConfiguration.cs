@@ -4,6 +4,8 @@
     using Configurators;
     using Definition;
     using MassTransit.Configurators;
+    using MassTransit.Topology.EntityNameFormatters;
+    using Microsoft.Azure.ServiceBus.Primitives;
     using Settings;
     using Topology.Configuration.Configurators;
     using Topology.Topologies;
@@ -19,6 +21,7 @@
         readonly ServiceBusHostProxy _proxy;
         readonly IServiceBusTopologyConfiguration _topologyConfiguration;
         ServiceBusHostSettings _hostSettings;
+        IMessageNameFormatter _messageNameFormatter;
 
         public ServiceBusHostConfiguration(IServiceBusBusConfiguration busConfiguration, IServiceBusTopologyConfiguration topologyConfiguration)
             : base(busConfiguration)
@@ -41,7 +44,27 @@
         public ServiceBusHostSettings Settings
         {
             get => _hostSettings;
-            set => _hostSettings = value ?? throw new ArgumentNullException(nameof(value));
+            set
+            {
+                _hostSettings = value ?? throw new ArgumentNullException(nameof(value));
+
+                if (_hostSettings.TokenProvider is ManagedIdentityTokenProvider)
+                {
+                    SetNamespaceSeparatorToTilde();
+                }
+            }
+        }
+
+        public void SetNamespaceSeparatorToTilde()
+        {
+            _messageNameFormatter = new ServiceBusMessageNameFormatter(true);
+            _topologyConfiguration.Message.SetEntityNameFormatter(new MessageNameFormatterEntityNameFormatter(_messageNameFormatter));
+        }
+
+        public void SetNamespaceSeparatorTo(string separator)
+        {
+            _messageNameFormatter = new DefaultMessageNameFormatter("---", "--", separator ?? throw new ArgumentNullException(nameof(separator)), "-");
+            _topologyConfiguration.Message.SetEntityNameFormatter(new MessageNameFormatterEntityNameFormatter(_messageNameFormatter));
         }
 
         void IReceiveConfigurator.ReceiveEndpoint(string queueName, Action<IReceiveEndpointConfigurator> configureEndpoint)
@@ -60,12 +83,53 @@
         {
             var queueName = definition.GetEndpointName(endpointNameFormatter ?? DefaultEndpointNameFormatter.Instance);
 
-            ReceiveEndpoint(queueName, x => x.Apply(definition, configureEndpoint));
+            ReceiveEndpoint(queueName, configurator =>
+            {
+                ApplyEndpointDefinition(configurator, definition);
+                configureEndpoint?.Invoke(configurator);
+            });
         }
 
         public void ReceiveEndpoint(string queueName, Action<IServiceBusReceiveEndpointConfigurator> configureEndpoint)
         {
             CreateReceiveEndpointConfiguration(queueName, configureEndpoint);
+        }
+
+        public void ApplyEndpointDefinition(IServiceBusReceiveEndpointConfigurator configurator, IEndpointDefinition definition)
+        {
+            configurator.ConfigureConsumeTopology = definition.ConfigureConsumeTopology;
+
+            if (definition.IsTemporary)
+            {
+                configurator.AutoDeleteOnIdle = Defaults.TemporaryAutoDeleteOnIdle;
+                configurator.RemoveSubscriptions = true;
+            }
+
+            if (definition.PrefetchCount.HasValue)
+            {
+                configurator.PrefetchCount = (ushort)definition.PrefetchCount.Value;
+            }
+
+            if (definition.ConcurrentMessageLimit.HasValue)
+            {
+                var concurrentMessageLimit = definition.ConcurrentMessageLimit.Value;
+
+                // if there is a prefetchCount, and it is greater than the concurrent message limit, we need a filter
+                if (!definition.PrefetchCount.HasValue || definition.PrefetchCount.Value > concurrentMessageLimit)
+                {
+                    configurator.MaxConcurrentCalls = concurrentMessageLimit;
+
+                    // we should determine a good value to use based upon the concurrent message limit
+                    if (definition.PrefetchCount.HasValue == false)
+                    {
+                        var calculatedPrefetchCount = concurrentMessageLimit * 12 / 10;
+
+                        configurator.PrefetchCount = (ushort)calculatedPrefetchCount;
+                    }
+                }
+            }
+
+            definition.Configure(configurator);
         }
 
         public IServiceBusReceiveEndpointConfiguration CreateReceiveEndpointConfiguration(string queueName,
@@ -139,7 +203,7 @@
 
         public override IBusHostControl Build()
         {
-            var hostTopology = new ServiceBusHostTopology(_topologyConfiguration, _hostSettings.ServiceUri);
+            var hostTopology = new ServiceBusHostTopology(_topologyConfiguration, _hostSettings.ServiceUri, _messageNameFormatter);
 
             var host = new ServiceBusHost(this, hostTopology);
 

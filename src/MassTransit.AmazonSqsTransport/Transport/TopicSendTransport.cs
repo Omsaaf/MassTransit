@@ -70,15 +70,15 @@
                 var activity = LogContext.IfEnabled(OperationName.Transport.Send)?.StartSendActivity(context);
                 try
                 {
-                    var request = clientContext.CreatePublishRequest(_context.EntityName, context.Body);
+                    if (_context.SendObservers.Count > 0)
+                        await _context.SendObservers.PreSend(context).ConfigureAwait(false);
+
+                    var request = await clientContext.CreatePublishRequest(_context.EntityName, context.Body).ConfigureAwait(false);
 
                     _context.SnsSetHeaderAdapter.Set(request.MessageAttributes, context.Headers);
 
                     _context.SnsSetHeaderAdapter.Set(request.MessageAttributes, "Content-Type", context.ContentType.MediaType);
                     _context.SnsSetHeaderAdapter.Set(request.MessageAttributes, nameof(context.CorrelationId), context.CorrelationId);
-
-                    if (_context.SendObservers.Count > 0)
-                        await _context.SendObservers.PreSend(context).ConfigureAwait(false);
 
                     await clientContext.Publish(request, context.CancellationToken).ConfigureAwait(false);
 

@@ -3,6 +3,7 @@ module.exports = {
   description: 'A free, open-source distributed application framework for .NET.',
   plugins: [
     '@vuepress/active-header-links',
+    '@vuepress/back-to-top',
     [
       '@vuepress/google-analytics', {
         'ga': 'UA-156512132-1'
@@ -17,7 +18,7 @@ module.exports = {
     },
     nav: [
       { text: "Blog", link: "/updates/" },
-      { text: 'Gitter', link: 'https://gitter.im/MassTransit/MassTransit' },
+      { text: "Discord", link: "/discord" },
       { text: 'NuGet', link: 'https://nuget.org/packages/MassTransit' }
     ],
     sidebarDepth: 1,
@@ -132,9 +133,16 @@ module.exports = {
                   '/advanced/middleware/receive',
                   '/advanced/middleware/circuit-breaker',
                   '/advanced/middleware/rate-limiter',
-                  '/advanced/middleware/latest',
                   '/advanced/middleware/transactions',
                   '/advanced/middleware/custom'
+                ]
+              },
+              {
+                title: 'Conductor',
+                path: '/advanced/conductor/',
+                collapsable: true,
+                children: [
+                  '/advanced/conductor/configuration'
                 ]
               },
               '/usage/mediator',
@@ -204,6 +212,7 @@ module.exports = {
           '/architecture/packages',
           '/architecture/interoperability',
           '/architecture/versioning',
+          '/architecture/newid',
           '/architecture/encrypted-messages',
           '/architecture/green-cache',
           '/architecture/history'
